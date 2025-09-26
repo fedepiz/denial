@@ -30,6 +30,7 @@ namespace ui {
 
   enum class SizeKind {
     Pixels,
+    Text,
     SumOfChildren,
     MaxOfChildren,
   };
@@ -185,6 +186,7 @@ namespace ui {
   void VSpace(Ui* ui);
   void HSpace(Ui* ui);
   bool Button(Ui* ui, String8 text);
+  void Label(Ui* ui, String8 text);
 }
 
 #endif

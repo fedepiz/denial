@@ -199,6 +199,12 @@ namespace ui {
           case SizeKind::Pixels:
             widget->layout.computed_size[axis] = logical_size.value;
             break;
+          case ui::SizeKind::Text: {
+              auto text_size = widget->layout.text_size;
+              f32 value = axis == 0 ? text_size.x : text_size.y;
+              widget->layout.computed_size[axis] = value + 10.0;
+            }
+            break;
           default:
             continue;
         }
@@ -414,6 +420,9 @@ namespace ui {
   }
 
   bool Button(Ui* ui, String8 text) {
+    auto* st_nums = ui->style.nums;
+    auto* st_colors = ui->style.colors;
+
     WidgetId id = { Hash(SubstringUntil(text, '#')) };
     auto interaction = InteractionFor(ui, id);
 
@@ -421,8 +430,7 @@ namespace ui {
 
     widget->text = WidgetText(ui, text);
     
-    auto* st_nums = ui->style.nums;
-    auto* st_colors = ui->style.colors;
+    SetPixelSize(widget->logical_size, { st_nums[(usize)NumVar::ITEM_WIDTH], st_nums[(usize)NumVar::ITEM_HEIGHT] });
 
     widget->fill = st_colors[(usize)ColorVar::ITEM_FILL];
 
@@ -437,8 +445,17 @@ namespace ui {
     widget->rounding = st_nums[(usize)NumVar::ITEM_ROUNDING];
     
     widget->stroke = { st_colors[(usize)stroke_color], st_nums[(usize)NumVar::ITEM_THICK] };
-    SetPixelSize(widget->logical_size, { st_nums[(usize)NumVar::ITEM_WIDTH], st_nums[(usize)NumVar::ITEM_HEIGHT] });
 
     return interaction.is_clicked;
+  }
+
+  void Label(Ui* ui, String8 text) {
+    auto widget = AddWidget(ui);
+    widget->text = WidgetText(ui, text);
+
+    widget->logical_size[0].kind = SizeKind::Text;
+    widget->logical_size[1].kind = SizeKind::Text;
+
+    widget->fill = ui->style.colors[(usize)ColorVar::ITEM_FILL];
   }
 }
