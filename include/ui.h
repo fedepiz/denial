@@ -19,6 +19,9 @@ namespace ui {
   struct Vec2 {
     f32 x{0.0};
     f32 y{0.0};
+
+    Vec2 operator*(const Vec2& other);
+    Vec2 operator*(f32 other);
   };
 
   struct Rect {
@@ -33,6 +36,7 @@ namespace ui {
     Text,
     SumOfChildren,
     MaxOfChildren,
+    PercentOfParent,
   };
 
   struct Size {
@@ -96,21 +100,11 @@ namespace ui {
     Layout layout;
   };
 
-
   struct Input {
     WidgetId hovered_id{NO_ID};
     bool click{false};
     bool hold{false};
   };
-
-  struct UiCtx {
-    Arena arena{nullptr};
-    Array<Widget> widgets;
-    Input input;
-  };
-
-  UiCtx NewCtx(usize num_widgets = 1024);
-  void Destroy(UiCtx* ctx);
   
   enum class NumVar {
     SPACER_WIDTH,
@@ -119,6 +113,7 @@ namespace ui {
     ITEM_HEIGHT,
     ITEM_THICK,
     ITEM_ROUNDING,
+    LIST_THICK,
     COUNT,
   };
 
@@ -127,11 +122,13 @@ namespace ui {
     ITEM_STROKE,
     ITEM_STROKE_HIGHLIGHT,
     ITEM_STROKE_INTERACT,
+    LIST_FILL,
+    LIST_STROKE,
     COUNT,
   };
 
   enum class FontVar {
-    ITEM_FONT,
+    DEFAULT_FONT,
     COUNT,
   };
   
@@ -156,6 +153,16 @@ namespace ui {
     Font value;
   };
 
+  struct UiCtx {
+    Arena arena{nullptr};
+    Array<Widget> widgets;
+    Style style;
+    Input input;
+  };
+
+  UiCtx NewCtx(usize num_widgets = 1024);
+  void Destroy(UiCtx* ctx);
+
   struct Ui {
     UiCtx* ctx{nullptr};
     Arena* arena{nullptr};
@@ -172,7 +179,7 @@ namespace ui {
 
   // UI variable management
   void PushNumVar(Ui* ui, NumVar var, f32 value);
-  void PopNumVar(Ui* ui, NumVar var);
+  void PopNumVar(Ui* ui);
 
   void PushColorVar(Ui* ui, ColorVar var, RGBA value);
   void PopColorVar(Ui* ui);
@@ -183,10 +190,21 @@ namespace ui {
   // Widgets
   Widget* AddWidget(Ui* ui, WidgetId id = {0});
 
-  void VSpace(Ui* ui);
-  void HSpace(Ui* ui);
+  void PopParent(Ui* ui);
+
+  enum class SpaceKind {
+    InLine,
+    CrossLine,
+  };
+  void Label(Ui* ui, String8 text);
+
+  void Space(Ui* ui, SpaceKind kind = SpaceKind::InLine, f32 multiplier = 1.0);
   bool Button(Ui* ui, String8 text);
   void Label(Ui* ui, String8 text);
+  void Header(Ui* ui, String8 text);
+
+  void VList(Ui* ui);
+  void HList(Ui* ui);
 }
 
 #endif

@@ -7,25 +7,46 @@ using namespace core;
 
 static inline
 void BuildUi(ui::Ui* ui) {
-    if (ui::Button(ui, Lit("Btn1"))) {
-      std::cout << "Button pressed" << std::endl;
+    {
+      ui::PushColorVar(ui, ui::ColorVar::LIST_FILL, ui->style.colors[(usize)ui::ColorVar::ITEM_FILL]);
+      ui::PushNumVar(ui,ui::NumVar::LIST_THICK, 4.0);
+
+      ui::VList(ui);
+
+      ui::PopColorVar(ui);
+      ui::PopNumVar(ui);
+
+      ui::Space(ui);
+
+      ui::Header(ui, Lit("Window"));
+
+      ui::Space(ui);
+  
+      {
+        ui::HList(ui);
+
+        ui::Space(ui);
+
+        if (ui::Button(ui, Lit("Test 1"))) {
+          std::cout << "Clicked" << std::endl;
+        }
+
+        ui::Space(ui);
+
+        ui::Button(ui, Lit("Test 2"));
+
+        ui::Space(ui);
+
+        ui::PopParent(ui);
+
+      }
+
+      ui::Space(ui);
+
+      ui::PopParent(ui);
     }
-
-    ui::VSpace(ui);
-
-    ui::PushColorVar(ui, ui::ColorVar::ITEM_STROKE, ui::NewRGB(255, 0, 0));
-    ui::Button(ui, Lit("Btn2"));
-    ui::PopColorVar(ui);
-
-    ui::VSpace(ui);
-
-    ui::PushColorVar(ui, ui::ColorVar::ITEM_FILL, ui::NewRGB(50, 200, 122));
-    ui::Label(ui, Lit("Hello goodbye, hello goodbye!"));
-    ui::PopColorVar(ui);
-
-    ui::VSpace(ui);
-
-    ui::Button(ui, Lit("Btn3"));
+    
+    ui::Space(ui);
 }
 
 int main() {
@@ -40,11 +61,7 @@ int main() {
   Arena frame_arena;
   defer(Free(&frame_arena));
 
-  Font default_font = LoadFontEx("assets/fonts/default.ttf", 28, nullptr, 0);
-
-  ui::FontPair fonts[] = {
-    { ui::FontVar::ITEM_FONT, default_font },
-  };
+  ui_ctx.style.fonts[(usize)ui::FontVar::DEFAULT_FONT] = LoadFontEx("assets/fonts/default.ttf", 28, nullptr, 0);
 
   while (!WindowShouldClose()) {
 
@@ -53,15 +70,14 @@ int main() {
     }
 
     BeginDrawing();
+    BeginBlendMode(BLEND_ALPHA);
     ClearBackground(RAYWHITE);
 
     auto ui = ui::BeginUi(&ui_ctx, &frame_arena, { 20.0, 20.0, 1600.0, 900.0 });
-    for (auto pair : fonts) {
-      ui->style.fonts[(usize)pair.var] = pair.value;
-    }
     BuildUi(ui);    
     ui::EndUi(ui);
 
+    EndBlendMode();
     EndDrawing();
 
     Reset(&frame_arena);

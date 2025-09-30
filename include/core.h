@@ -48,6 +48,13 @@ namespace core {
     return x > y ? x : y;
   }
 
+  template <typename T>
+  void Swap(T* a, T* b) {
+    T temp = *a;
+    *a = *b;
+    *b = temp;
+  }
+
   // Arena
   struct ArenaChunk {
     usize capacity{0};

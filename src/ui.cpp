@@ -8,6 +8,47 @@ namespace ui {
     return this->id == other.id;
   }
 
+  inline static
+  Style DefaultStyle() {
+    Style style;
+    ZeroOut(&style);
+
+    NumPair num_pairs[] = {
+      { NumVar::SPACER_WIDTH, 20.0 },
+      { NumVar::SPACER_HEIGHT, 20.0 },
+      { NumVar::ITEM_WIDTH, 80.0 },
+      { NumVar::ITEM_HEIGHT, 30.0 },
+      { NumVar::ITEM_THICK, 4.0 },
+      { NumVar::ITEM_ROUNDING, 0.5 },
+    };
+
+    for (auto pair : num_pairs) {
+      style.nums[(usize)pair.var] = pair.value;
+    }
+
+    ColorPair color_pairs[] = {
+      { ColorVar::ITEM_FILL, NewRGB(150, 150, 100) },
+      { ColorVar::ITEM_STROKE, NewRGB(0, 0, 0) },
+      { ColorVar::ITEM_STROKE_HIGHLIGHT, NewRGB(255, 255, 0) },
+      { ColorVar::ITEM_STROKE_INTERACT, NewRGB(0, 255, 0) },
+      { ColorVar::LIST_STROKE, NewRGB(0, 0, 0) },
+    };
+
+    for (auto pair : color_pairs) {
+      style.colors[(usize)pair.var] = pair.value;
+    }
+
+    FontPair font_pairs[] = {
+      { FontVar::DEFAULT_FONT, GetFontDefault() },
+    };
+
+    for (auto pair : font_pairs) {
+      style.fonts[(usize)pair.var] = pair.value;
+    }
+
+    return style;
+  }
+
   UiCtx NewCtx(usize num_widgets) {
     // Create a new arena that will hold the UICtx's data
     Arena arena = NewArena(sizeof(Widget) * num_widgets);
@@ -15,6 +56,7 @@ namespace ui {
     return {
       .arena = arena,
       .widgets = NewEmptyArray<Widget>(&arena, num_widgets),
+      .style = DefaultStyle(),
     };
   }
 
@@ -36,6 +78,15 @@ namespace ui {
     return { xy.x, xy.y };
   }
 
+
+  Vec2 Vec2::operator*(const Vec2& other) {
+    return { this->x * other.x, this->y * other.y };
+  }
+
+  Vec2 Vec2::operator*(f32 other) {
+    return { this->x * other, this->y * other };
+  }
+
   static inline
   Rectangle ToRay(Rect rect) {
     return { rect.x, rect.y, rect.w, rect.h };
@@ -50,7 +101,6 @@ namespace ui {
   Vec2 FromRay(Vector2 xy) {
     return { xy.x, xy.y };
   }
-
 
   static inline
   bool Contains(Rect rect, Vec2 point) {
@@ -77,43 +127,28 @@ namespace ui {
   }
 
   inline static
-  Style DefaultStyle() {
-    Style style;
-    NumPair num_pairs[] = {
-      { NumVar::SPACER_WIDTH, 20.0 },
-      { NumVar::SPACER_HEIGHT, 20.0 },
-      { NumVar::ITEM_WIDTH, 80.0 },
-      { NumVar::ITEM_HEIGHT, 30.0 },
-      { NumVar::ITEM_THICK, 4.0 },
-      { NumVar::ITEM_ROUNDING, 0.5 },
-    };
-
-    for (auto pair : num_pairs) {
-      style.nums[(usize)pair.var] = pair.value;
-    }
-
-    ColorPair color_pairs[] = {
-      { ColorVar::ITEM_FILL, NewRGB(150, 150, 100) },
-      { ColorVar::ITEM_STROKE, NewRGB(0, 0, 0) },
-      { ColorVar::ITEM_STROKE_HIGHLIGHT, NewRGB(255, 255, 0) },
-      { ColorVar::ITEM_STROKE_INTERACT, NewRGB(0, 255, 0) }
-    };
-
-    for (auto pair : color_pairs) {
-      style.colors[(usize)pair.var] = pair.value;
-    }
-
-    FontPair font_pairs[] = {
-      { FontVar::ITEM_FONT, GetFontDefault() },
-    };
-
-    for (auto pair : font_pairs) {
-      style.fonts[(usize)pair.var] = pair.value;
-    }
-
-    return style;
+  f32 GetStyleVar(Ui* ui, NumVar var) {
+    return ui->style.nums[(usize)var];
   }
-  
+
+  inline static
+  Vec2 GetStyleVar(Ui* ui, NumVar x_var, NumVar y_var) {
+    auto x = GetStyleVar(ui, x_var);
+    auto y = GetStyleVar(ui, y_var);
+    return { x, y };
+  }
+
+  inline static
+  RGBA GetStyleVar(Ui* ui, ColorVar var) {
+    return ui->style.colors[(usize)var];
+  }
+
+  inline static
+  Font GetStyleVar(Ui* ui, FontVar var) {
+    return ui->style.fonts[(usize)var];
+  }
+
+
   Ui* BeginUi(UiCtx* ctx, Arena* arena, Rect bounds) {
     // Clear the current widgets
     Clear(ctx->widgets);
@@ -127,7 +162,7 @@ namespace ui {
       .ctx = ctx,
       .active_parent = nullptr,
       .widgets = NewEmptyArray<Widget*>(arena, ctx->widgets->capacity),
-      .style = DefaultStyle(),
+      .style = ctx->style,
       .num_stack = NewEmptyArray<NumPair>(arena, 20),
       .color_stack = NewEmptyArray<ColorPair>(arena, 20),
       .font_stack = NewEmptyArray<FontPair>(arena, 10),
@@ -138,7 +173,9 @@ namespace ui {
     assert(root);
     root->offset = Corner(bounds);
     SetPixelSize(root->logical_size, { bounds.w, bounds.h });
+
     root->growth_axis.y = 1.0;
+
     Push(ui->widgets, root);
 
     ui->active_parent = root;
@@ -227,6 +264,22 @@ namespace ui {
             continue;
         }
         widget->layout.computed_size[axis] = ReduceChildrenComputedSize(widget, axis, op);
+      }
+
+      // Parent-dependent size
+      for (auto widget: ui->widgets) {
+        auto logical_size = widget->logical_size[axis];
+
+        switch (logical_size.kind) {
+          case (SizeKind::PercentOfParent): {            
+              assert(widget->tree.parent);
+              auto parent_size = widget->tree.parent->layout.computed_size[axis];
+              widget->layout.computed_size[axis] = parent_size * logical_size.value;
+              break;
+          }
+          default:
+            continue;
+        }
       }
     }
 
@@ -382,6 +435,12 @@ namespace ui {
     };
   }
 
+  void PopParent(Ui* ui) {
+    auto* next = ui->active_parent->tree.parent;
+    assert(next);
+    ui->active_parent = next;
+  }
+
   Widget* AddWidget(Ui* ui, WidgetId id) {
     auto widget = Emplace(ui->ctx->widgets, {0});
     assert(widget);
@@ -396,21 +455,25 @@ namespace ui {
     return widget;
   }
 
-  void VSpace(Ui* ui) {
-    auto widget = AddWidget(ui);
-    auto size = ui->style.nums[(usize)NumVar::SPACER_HEIGHT];
-    SetPixelSize(widget->logical_size, { 0.0, size });
-  }
+  void Space(Ui* ui, SpaceKind kind, f32 multiplier) {
+    auto gw_axis = ui->active_parent->growth_axis;
 
-  void HSpace(Ui* ui) {
+    switch (kind) {
+      case ui::SpaceKind::InLine:
+        break;
+      case ui::SpaceKind::CrossLine:
+        Swap(&gw_axis.x, &gw_axis.y);
+        break;
+    }
+    
+    Vec2 size = GetStyleVar(ui, NumVar::SPACER_WIDTH, NumVar::SPACER_HEIGHT) * gw_axis * multiplier;
     auto widget = AddWidget(ui);
-    auto size = ui->style.nums[(usize)NumVar::SPACER_WIDTH];
-    SetPixelSize(widget->logical_size, { size, 0.0 });
+    SetPixelSize(widget->logical_size, size);
   }
 
   static inline
   Text WidgetText(Ui* ui, String8 text) {
-    auto font = ui->style.fonts[(usize)FontVar::ITEM_FONT];
+    auto font = GetStyleVar(ui, FontVar::DEFAULT_FONT); 
     return {
       .content = text,
       .color = NewRGB(0, 0, 0),
@@ -420,9 +483,6 @@ namespace ui {
   }
 
   bool Button(Ui* ui, String8 text) {
-    auto* st_nums = ui->style.nums;
-    auto* st_colors = ui->style.colors;
-
     WidgetId id = { Hash(SubstringUntil(text, '#')) };
     auto interaction = InteractionFor(ui, id);
 
@@ -430,9 +490,7 @@ namespace ui {
 
     widget->text = WidgetText(ui, text);
     
-    SetPixelSize(widget->logical_size, { st_nums[(usize)NumVar::ITEM_WIDTH], st_nums[(usize)NumVar::ITEM_HEIGHT] });
-
-    widget->fill = st_colors[(usize)ColorVar::ITEM_FILL];
+    SetPixelSize(widget->logical_size, GetStyleVar(ui, NumVar::ITEM_WIDTH, NumVar::ITEM_HEIGHT));
 
     auto stroke_color = ColorVar::ITEM_STROKE;
 
@@ -442,9 +500,10 @@ namespace ui {
       stroke_color = ColorVar::ITEM_STROKE_HIGHLIGHT;
     }
 
-    widget->rounding = st_nums[(usize)NumVar::ITEM_ROUNDING];
+    widget->rounding = GetStyleVar(ui, NumVar::ITEM_ROUNDING);
     
-    widget->stroke = { st_colors[(usize)stroke_color], st_nums[(usize)NumVar::ITEM_THICK] };
+    widget->fill = GetStyleVar(ui, ColorVar::ITEM_FILL);
+    widget->stroke = { GetStyleVar(ui, stroke_color), GetStyleVar(ui, NumVar::ITEM_THICK),};
 
     return interaction.is_clicked;
   }
@@ -455,7 +514,45 @@ namespace ui {
 
     widget->logical_size[0].kind = SizeKind::Text;
     widget->logical_size[1].kind = SizeKind::Text;
+  }
 
-    widget->fill = ui->style.colors[(usize)ColorVar::ITEM_FILL];
+  void Header(Ui* ui, String8 text) {
+    auto widget = AddWidget(ui);
+    widget->text = WidgetText(ui, text);
+
+    widget->logical_size[0] = { SizeKind::PercentOfParent, 1.0 };
+    widget->logical_size[1] = { SizeKind::Pixels, GetStyleVar(ui, NumVar::ITEM_HEIGHT) };
+  }
+
+  Widget* BaseList(Ui* ui) {
+    auto* widget = AddWidget(ui);
+
+    widget->fill = GetStyleVar(ui, ColorVar::LIST_FILL);
+
+    widget->stroke = {
+      .thickness = GetStyleVar(ui, NumVar::LIST_THICK),
+      .color = GetStyleVar(ui, ColorVar::LIST_STROKE),
+    };
+
+    assert(widget->tree.parent);
+    ui->active_parent = widget;
+    return widget;
+  }
+  
+  void HList(Ui* ui) {
+    auto widget = BaseList(ui);
+    widget->growth_axis.x = 1.0;
+
+    widget->logical_size[0] = { .kind = SizeKind::SumOfChildren };
+    widget->logical_size[1] = { .kind = SizeKind::MaxOfChildren };
+  }
+
+  void VList(Ui* ui) {
+    auto widget = BaseList(ui);
+
+    widget->growth_axis.y = 1.0;
+    widget->logical_size[0] = { .kind = SizeKind::MaxOfChildren };
+    widget->logical_size[1] = { .kind = SizeKind::SumOfChildren };
+
   }
 }
