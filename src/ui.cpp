@@ -8,6 +8,10 @@ namespace ui {
     return this->id == other.id;
   }
 
+  bool WidgetId::operator!=(const WidgetId& other) const {
+    return this->id != other.id;
+  }
+
   inline static
   Style DefaultStyle() {
     Style style;
@@ -56,8 +60,40 @@ namespace ui {
     return {
       .arena = arena,
       .widgets = NewEmptyArray<Widget>(&arena, num_widgets),
+      .write_cache = NewEmptyArray<WidgetCache>(&arena, num_widgets),
+      .read_cache = NewEmptyArray<WidgetCache>(&arena, num_widgets),
       .style = DefaultStyle(),
     };
+  }
+
+  inline static
+  WidgetCache  ReadCacheOf(UiCtx* ctx, WidgetId id) {
+    for (auto cache: ctx->read_cache) {
+      if (cache.id == id) {
+        return cache;
+      }
+    }
+    return {0};
+  }
+
+  inline static
+  WidgetCache* WriteCacheOf(UiCtx* ctx, Widget* widget) {
+    // Get the write cache if present
+    for (usize i = 0; i < ctx->write_cache->len; ++i) {
+      auto cache = At(ctx->write_cache, i);
+      if (cache->id == widget->id) {
+        return cache;
+      }
+    }
+
+    // Else construct and return it
+    auto cache = WidgetCache {
+      .id = widget->id,
+      .offset = widget->offset
+    };
+
+    Push(ctx->write_cache, cache);
+    return Last(ctx->write_cache);
   }
 
   void Destroy(UiCtx* ctx) {
@@ -79,12 +115,25 @@ namespace ui {
   }
 
 
-  Vec2 Vec2::operator*(const Vec2& other) {
+  Vec2& Vec2::operator+=(const Vec2& other) {
+    *this = *this + other;
+      return *this;
+  }
+
+  Vec2 Vec2::operator*(const Vec2& other) const {
     return { this->x * other.x, this->y * other.y };
   }
 
-  Vec2 Vec2::operator*(f32 other) {
+  Vec2 Vec2::operator*(f32 other) const {
     return { this->x * other, this->y * other };
+  }
+
+  Vec2 Vec2::operator+(const Vec2& other) const {
+    return { this->x + other.x, this->y + other.y };
+  }
+
+  Vec2 Vec2::operator-(const Vec2& other) const {
+    return { this->x - other.x, this->y - other.y };
   }
 
   static inline
@@ -152,6 +201,11 @@ namespace ui {
   Ui* BeginUi(UiCtx* ctx, Arena* arena, Rect bounds) {
     // Clear the current widgets
     Clear(ctx->widgets);
+
+    // Flip active and inactive widget
+    Swap(ctx->write_cache, ctx->read_cache);
+    // Clear the write_cache
+    Clear(ctx->write_cache);
 
     // Allocate he ui in the provided arena
     auto ui = Alloc<Ui>(arena);
@@ -312,17 +366,69 @@ namespace ui {
   void ProcessInput(Ui* ui) {
     auto mouse_pos = FromRay(GetMousePosition());
     // Find top widget that is hovered
+    Input* old_input = &ui->ctx->input;
     Input input;
-    input.click = IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
-    input.hold = IsMouseButtonDown(MOUSE_LEFT_BUTTON);
+
+    input.mouse_pos = mouse_pos;
+    input.mouse_prev_pos = old_input->mouse_pos;
+
     for (int idx = ui->widgets->len - 1; idx >= 0; --idx) {
       auto widget = Get(ui->widgets, idx);
+      if (widget->id == NO_ID || widget->mouse_transparent) {
+        // We skip over no-id widgets, or those that are marked as mouse-transparent
+        continue;
+      }
       if (Contains(widget->layout.bounds, mouse_pos)) {
         input.hovered_id = widget->id;
         break;
       }
     }
+    if (input.hovered_id != NO_ID) {
+      input.click = IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+      input.hold = IsMouseButtonDown(MOUSE_LEFT_BUTTON);
+    }
+    
+    // If we are holding now, and were not holding before,
+    // start tracking the hold position
+    if (input.hold) {
+       if (old_input->hold) {
+         input.hold_start_pos = old_input->hold_start_pos;
+       } else {
+         input.hold_start_pos = mouse_pos;
+       }
+    } else {
+      input.hold_start_pos = {0};
+    }
+    
     ui->ctx->input = input;
+  }
+
+  static inline
+  void Drag(Ui* ui) {
+    // For each draggable widget...
+    for (auto widget : ui->widgets) {
+
+      bool candidate =
+        // We care about draggable widgets
+        widget->draggable &&
+        // With an id
+        widget->id != NO_ID;
+
+      if (!candidate) {
+        continue;
+      }
+      
+      // Find the widget's cache, and update the recorded position
+      auto cache = WriteCacheOf(ui->ctx, widget);
+      cache->offset = widget->offset;
+
+      // If we are hold_and_drag this widget, update the offset
+      if (ui->ctx->input.hold && ui->ctx->input.hovered_id == widget->id) {
+        // Get the delta-mouse movement
+        auto delta_mouse = ui->ctx->input.mouse_pos - ui->ctx->input.mouse_prev_pos;
+        cache->offset += delta_mouse;
+      }
+    };
   }
 
   static inline
@@ -366,7 +472,9 @@ namespace ui {
     Layout(ui);    
 
     ProcessInput(ui);
-    
+
+    Drag(ui);
+
     Draw(ui);
   }
 
@@ -554,5 +662,22 @@ namespace ui {
 
     widget->logical_size[0] = { .kind = SizeKind::MaxOfChildren };
     widget->logical_size[1] = { .kind = SizeKind::SumOfChildren };
+  }
+
+  void Window(Ui* ui, String8 id_source) {
+      ui::PushColorVar(ui, ui::ColorVar::LIST_FILL, ui->style.colors[(usize)ui::ColorVar::ITEM_FILL]);
+      ui::PushNumVar(ui,ui::NumVar::LIST_THICK, 4.0);
+
+      ui::VList(ui);
+
+      auto widget = ui->active_parent;
+      widget->id = { Hash(SubstringUntil(id_source, '#')) };
+      auto cache = ReadCacheOf(ui->ctx, widget->id);
+
+      widget->offset = cache.offset;
+      widget->draggable = true;
+
+      ui::PopColorVar(ui);
+      ui::PopNumVar(ui);
   }
 }

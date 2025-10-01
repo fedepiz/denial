@@ -9,13 +9,7 @@ using namespace core;
 static inline
 void BuildUi(ui::Ui* ui) {
     {
-      ui::PushColorVar(ui, ui::ColorVar::LIST_FILL, ui->style.colors[(usize)ui::ColorVar::ITEM_FILL]);
-      ui::PushNumVar(ui,ui::NumVar::LIST_THICK, 4.0);
-
-      ui::VList(ui);
-
-      ui::PopColorVar(ui);
-      ui::PopNumVar(ui);
+      ui::Window(ui, Lit("Hello Window"));
 
       ui::Space(ui);
 

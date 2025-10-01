@@ -166,6 +166,12 @@ namespace core {
   }
 
   template <typename T>
+  T* Last(Array<T> array) {
+    if (array->len == 0) { return nullptr; }
+    return At(array, array->len - 1);
+  }
+
+  template <typename T>
   T Get(Array<T> array, usize idx) {
     if (auto ptr = At(array, idx)) {
       return *ptr;

@@ -20,8 +20,11 @@ namespace ui {
     f32 x{0.0};
     f32 y{0.0};
 
-    Vec2 operator*(const Vec2& other);
-    Vec2 operator*(f32 other);
+    Vec2& operator+=(const Vec2& other);
+    Vec2 operator+(const Vec2& other) const;
+    Vec2 operator-(const Vec2& other) const;
+    Vec2 operator*(const Vec2& other) const;
+    Vec2 operator*(f32 other) const;
   };
 
   struct Rect {
@@ -53,9 +56,10 @@ namespace ui {
     u64 id{0};
 
     bool operator==(const WidgetId& other) const;
+    bool operator!=(const WidgetId& other) const;
   };
 
-  const WidgetId NO_ID = { std::numeric_limits<u64>::max() };
+  const WidgetId NO_ID = { 0 };
 
   struct Widget;
 
@@ -86,6 +90,9 @@ namespace ui {
     WidgetId id;
     // Logical size
     Vec2 offset;
+    bool draggable{false};
+    bool mouse_transparent{false};
+
     Size logical_size[2];
     Vec2 growth_axis;
     // Paint
@@ -104,6 +111,9 @@ namespace ui {
     WidgetId hovered_id{NO_ID};
     bool click{false};
     bool hold{false};
+    Vec2 hold_start_pos;
+    Vec2 mouse_pos;
+    Vec2 mouse_prev_pos;
   };
   
   enum class NumVar {
@@ -153,9 +163,20 @@ namespace ui {
     Font value;
   };
 
+  // Cache some information about a widget cross-frames
+  struct WidgetCache {
+    WidgetId id{NO_ID};
+    Vec2 offset;
+  };
+  
   struct UiCtx {
     Arena arena{nullptr};
     Array<Widget> widgets;
+    // Cache is double-buffered:
+    // we write into active cache and read
+    // from inactive cache
+    Array<WidgetCache> write_cache;
+    Array<WidgetCache> read_cache;
     Style style;
     Input input;
   };
@@ -205,6 +226,7 @@ namespace ui {
 
   void VList(Ui* ui);
   void HList(Ui* ui);
+  void Window(Ui* ui, String8 id_source);
 }
 
 #endif
