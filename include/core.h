@@ -207,5 +207,154 @@ namespace core {
   // Hashing
   u64 Hash(u64 x, u64 y);
   u64 Hash(String8 str);
+
+  // Slotmap
+  template <typename T>
+  struct SlotMapNode {
+    u32 generation{0};
+    union {
+      T data;
+      u32 next_free;
+    };
+  };
+
+  template <typename K, typename V>
+  struct SlotMap {
+      usize length{0};
+      usize capacity{0};
+      SlotMapNode<V>* nodes{nullptr};
+      u32 next_free{0};
+  };
+
+  template <typename K, typename V>
+  void Grow(SlotMap<K, V>* sm, usize capacity) {
+    if (capacity <= sm->capacity) {
+      return;
+    }
+    SlotMapNode<V>* nodes = (SlotMapNode<V>*)malloc(sizeof(SlotMapNode<V>) * capacity);
+    if (sm->nodes) {
+      memcpy(nodes, sm->nodes, sizeof(SlotMapNode<V>) * sm->capacity);
+      free(sm->nodes);
+    }
+    sm->nodes = nodes;
+    sm->capacity = capacity;
+  }
+
+  template <typename K, typename V>
+  K Insert(SlotMap<K, V>* sm, V value) {
+    if (sm->next_free >= sm->capacity) {
+      auto capacity = Max<usize>(sm->capacity * 2, 100);
+      Grow(sm, capacity);
+    }
+
+    bool is_new_alloc = sm->next_free == sm->length;
+    u32 index = sm->next_free;
+    SlotMapNode<V>* node = &sm->nodes[index];
+    assert(node->generation % 2 == 0);
+    node->generation += 1;
+
+    K id = { .index = index, .generation = node->generation };
+
+    if (is_new_alloc) {
+      sm->next_free += 1;
+      sm->length += 1;
+      node->data = value;
+    } else {
+      sm->next_free = node->next_free;
+      node->data = value;
+    }
+
+    return id;
+  }
+
+  template <typename K, typename V>
+  V* Get(SlotMap<K, V>* sm, K id) {
+    if (id.index >= sm->length) {
+      return nullptr;
+    }
+    SlotMapNode<V>* node = &sm->nodes[id.index];
+    if (node->generation != id.generation) {
+      return nullptr;
+    }
+    return &node->data;
+  }
+
+  template <typename K, typename V>
+  bool Contains(SlotMap<K, V>* sm, K id) {
+    return Get(sm, id) != nullptr;
+  }
+
+  template <typename K, typename V>
+  bool Remove(SlotMap<K, V>* sm, K id) {
+    if (id.index >= sm->length) {
+      return false;
+    }
+    SlotMapNode<V>* node = &sm->nodes[id.index];
+    if (node->generation != id.generation) {
+      return false;
+    }
+
+    node->generation += 1;
+    assert(node->generation % 2 == 0);
+    node->next_free = sm->next_free;
+    sm->next_free = id.index;
+    return true;
+  }
+
+  template <typename K, typename V>
+  struct SlotMapIter {
+    SlotMap<K, V>* sm{nullptr};
+    u32 idx{0};
+  };
+
+  template <typename K, typename V>
+  struct SlotMapEntry {
+    K key{0};
+    V* value{nullptr};
+
+    explicit operator bool() const {
+      return this->value != nullptr;
+    }
+  };
+
+  template <typename K, typename V>
+  SlotMapIter<K, V> Iter(SlotMap <K, V>* sm) {
+    assert(sm);
+    return {
+      .sm = sm,
+      .idx = 0,  
+    };
+  }
+
+  template <typename K, typename V>
+  SlotMapEntry<K, V> Next(SlotMapIter<K, V>* iter) {
+    while (true) {
+      if (iter->idx >= iter->sm->length) {
+        return {};
+      }
+      SlotMapNode<V>* node = &iter->sm->nodes[iter->idx];
+      // If the node has some value...
+      if (node->generation % 2 == 1) {
+        K key = { .index = iter->idx, .generation = node->generation };
+        iter->idx++;
+        return { .key = key, .value = &node->data };
+      } else {
+        // Just increment
+        iter->idx++;
+      }
+    }
+  }
+
+  
+  #define MAKE_SLOTMAP_KEY(NAME) \
+  struct NAME { \
+    u32 index{0}; \
+    u32 generation{0}; \
+                       \
+    bool operator==(const Entity& other) const { \
+      return this->index == other.index &&       \
+             this->generation == other.generation; \
+    }  \
+  };
 }
 #endif

@@ -1,5 +1,6 @@
 #include "ui.h"
 #include <core.h>
+#include <ostream>
 #include <raylib/raylib.h>
 #include <iostream>
 
@@ -33,7 +34,9 @@ void BuildUi(ui::Ui* ui) {
 
         ui::Space(ui);
 
-        ui::Button(ui, Lit("Test 2"));
+        if (ui::Button(ui, Lit("Test 2"))) {
+          std::cout << "Clicked" << std::endl;
+        }
 
         ui::Space(ui);
 
@@ -45,16 +48,48 @@ void BuildUi(ui::Ui* ui) {
 
       ui::PopParent(ui);
     }
-    
-    ui::Space(ui);
 }
+
+MAKE_SLOTMAP_KEY(Entity);
+
+struct EntityData {
+  String8 name;
+};
+
+template <typename T>
+u64 ToRawId(T id) {
+  static_assert(sizeof(Entity) == 8);
+  return *(u64*)(&id);
+}
+
+template <typename T>
+T FromRawId(u64 raw) {
+  static_assert(sizeof(T) == 8);
+  return *(T*)(&raw);
+}
+
 
 int main() {
   InitWindow(1600, 900, "Test");
   SetTargetFPS(60);
 
-  std::cout << Lit("Hello") << std::endl;
+  SlotMap<Entity, EntityData> entities{0};
 
+  auto e1 = Insert(&entities, { .name = Lit("Federico") });
+  auto e2 = Insert(&entities, { .name = Lit("Tianqi") });
+  std::cout << "Name #1 " << Get(&entities, e1)->name << std::endl;
+  std::cout << "Name #2 " << Get(&entities, e2)->name << std::endl;
+  {
+    auto it = Iter(&entities);
+    auto num = 0;
+    while (auto entry = Next(&it)) {
+      assert(FromRawId<Entity>(ToRawId(entry.key)) == entry.key);
+      
+      std::cout << "#" << num << " " << entry.key.index << ", " << entry.key.generation << " " << entry.value->name << ";" << std::endl;
+      num++;
+    }
+  }
+  
   ui::UiCtx ui_ctx = ui::NewCtx();
   defer(Destroy(&ui_ctx));
 

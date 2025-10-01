@@ -551,8 +551,8 @@ namespace ui {
     auto widget = BaseList(ui);
 
     widget->growth_axis.y = 1.0;
+
     widget->logical_size[0] = { .kind = SizeKind::MaxOfChildren };
     widget->logical_size[1] = { .kind = SizeKind::SumOfChildren };
-
   }
 }
